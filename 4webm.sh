@@ -72,7 +72,7 @@ Arguments:
 				DEFAULT:	No additional options
 				EXAMPLE:	-x "-vf scale=-1:720 -aspect 16:9"
 
-	FULL EXAMPLE: $ bash. 4webm.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1"
+	FULL EXAMPLE: $ bash 4webm.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1"
 
 EOF
 }
