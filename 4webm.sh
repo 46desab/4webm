@@ -31,7 +31,7 @@ Arguments:
 	-i INPUT FILE*	Specifies the input file to be used, output file name will be "inputfilename_DATE_TIME.webm"
 				EXAMPLE:	-i inputfilename.mp4
 
-	-a AUDIO	Toggles audio and allows for a bitrate specification. Can only be used in conjunction with boards: "wsg" and "gif".
+	-a AUDIO	Toggles audio and allows for a bitrate specification. Can only be used in conjunction with boards: /wsg/ and /gif/.
 				DEFAULT:	OFF: No audio
 						ON: 96kbps
 				EXAMPLE:	-a, -a 128
@@ -65,14 +65,14 @@ Arguments:
 	-v SPEED	Specifies the -speed setting of libvpx-vp9. Lower speed mean higher compression but also longer
 			encoding times.
 				DEFAULT:	1
-				EXAMPLE:	-v 4
+				EXAMPLE:	-v 2
 
 	-x EXTRA	Specifies additional ffmpeg parameters. Needs to be delimited by " ".  Can be used to scale, crop, filter etc.
 			Please refer to the ffmpeg manual for more information.
 				DEFAULT:	No additional options
 				EXAMPLE:	-x "-vf scale=-1:720 -aspect 16:9"
 
-	FULL EXAMPLE: $ bash webmify.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1"
+	FULL EXAMPLE: $ bash. 4webm.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1"
 
 EOF
 }
