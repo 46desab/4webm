@@ -25,10 +25,10 @@ EXTRARG=""
 Help() {
 cat <<EOF
 
-Simple 4chan webm script. Arguments with a "*" are required. Numbers, when specified, should always be positive integers incl. 0.
+Simple 4chan webm script.
 
 Arguments:
-	-i INPUT FILE*	Specifies the input file to be used, output file name will be "inputfilename_DATE_TIME.webm"
+	-i INPUT FILE $( tput setaf 1 )(REQUIRED!)$( tput sgr 0 ) Specifies the input file to be used, output file name will be "inputfilename_DATE_TIME.webm"
 				EXAMPLE:	-i inputfilename.mp4
 
 	-a AUDIO	Toggles audio and allows for a bitrate specification. Can only be used in conjunction with boards: /wsg/ and /gif/.
@@ -82,7 +82,8 @@ EOF
 ################
 
 MediaInfo() {
-echo "==================================================================================================================="
+tput setaf 6
+echo "========================================================================================================="
 echo "INPUT FILE:			$INFILE"
 echo "OUTPUT FILE:			${OUTFILE}.webm"
 echo "SELECTED BOARD:			/$BOARD/"
@@ -97,7 +98,8 @@ echo "VIDEO CODEC:			$LIBCV"
 echo "CURRENT TOTAL BITRATE:		$CRAT kbps"
 echo "MAX. PERMISSIBLE BITRATE:	$NOMINAL kbps"
 echo "SELECTED VIDEO BITRATE:		$BITRATE kbps"
-echo "==================================================================================================================="
+echo "========================================================================================================="
+tput sgr 0
 }
 
 #####################
@@ -105,7 +107,7 @@ echo "==========================================================================
 #####################
 
 Encode() {
-ffmpeg -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 1 -quality good -speed 4 -an -f rawvideo -y /dev/null
+ffmpeg -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 1 -quality good -speed 4 $EXTRARG -an -f rawvideo -y /dev/null
 ffmpeg -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
 }
 
@@ -173,7 +175,7 @@ then
     fi
 elif [[ $AUDIO == true ]] && [[ (( $BOARD != wsg || $BOARD != gif )) ]]
 then
-    echo "The selected board does not support audio. Please deselect the audio flag \"-a\" or choose a board with audio compatibility."
+    echo "$( tput setaf 1)LIMIT ERROR: $( tput sgr 0 )The selected board does not support audio. Please deselect the audio flag \"-a\" or choose a board with audio compatibility."
     exit
 fi
 
@@ -208,7 +210,7 @@ fi
 
 if [[ $( echo "$DURATION > $MAXDUR" | bc -l ) -eq 1 ]]
 then
-    echo "The duration of the input medium exceeds the max. permissible duration ($MAXDUR s) for your selected board."
+    echo "$( tput setaf 1)LIMIT ERROR: $( tput sgr 0 )The duration of the input medium exceeds the max. permissible duration ($MAXDUR s) for your selected board."
     echo "Specify a different board or cut the video file."
     exit
 fi
@@ -228,9 +230,24 @@ else
     BITRATE=$( echo "$CRAT - $MARGIN" | bc )
 fi
 
+####################
+# RESOLUTION CHECK #
+####################
+
+RES=$( ffprobe "$INFILE" 2>&1 | grep -o -E [0-9]\{2,4\}x[0-9]\{2,4\} )
+#FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+ fps" | sed 's/\( fps.*\)$//' )
+HRES=$( echo "$RES" | awk -F x '{print $1}' )
+VRES=$( echo "$RES" | awk -F x '{print $2}' )
+
+if [[ $( echo "$HRES > 2048" | bc -l ) -eq 1 || $( echo "$VRES > 2048" | bc -l ) -eq 1 ]]
+then
+    echo "$( tput setaf 1)LIMIT ERROR: $( tput sgr 0 )The horizontal/vertical video resolution exceeds 2048p. Please scale/crop the video"
+    exit
+fi
+
 MediaInfo
 
-echo -n "Proceed? [y/n]: "
+echo -n "Proceed? [$( tput setaf 2)y$( tput sgr 0)/$(tput setaf 1)n$( tput sgr 0)]: "
 read -r AFFIRM
 
 if [[ $AFFIRM == y ]]
@@ -242,18 +259,20 @@ else
     exit
 fi
 
-######################
-# OUTPUT FILE ANALYSIS #
-######################
+rm ffmpeg2pass-0.log
 
-OUTSIZE=$( ls -l | grep "${OUTFILEFIXED}.webm" | awk {'print $5'} )
+########################
+# OUTPUT FILE ANALYSIS #
+########################
+
+OUTSIZE=$( ls -l | grep "${OUTFILEFIXED}.webm" | awk '{print $5}' )
 OUTSIZE=$( echo "scale=10; $OUTSIZE/(2^20)" | bc)
 
 if [[ $( echo "$OUTSIZE > $FILESIZE" | bc -l ) -eq 1 ]]
 then
-    echo "The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
+    echo "$( tput setaf 1)LIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
     echo "Please rerun the script using a higher margin (\"-m X\") or change the target board."
     exit
 fi
 
-echo "The output file size is: $OUTSIZE MiB"
+echo "The output file size is: $( tput setaf 2)$OUTSIZE MiB$( tput sgr 0)"
