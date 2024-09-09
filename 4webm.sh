@@ -21,6 +21,8 @@ MARGIN="0"
 QUALITY="good"
 SPEED="1"
 EXTRARG=""
+LOWLIMIT="10"
+OVERHEAD="3"
 
 Help() {
 cat <<EOF
@@ -46,9 +48,9 @@ Arguments:
 							ON: VP8 + VORBIS
 				EXAMPLE:        -l
 
-	-m MARGIN	Reduces the calculated max. permissible bitrate by X kbps. Can be used to reduce file sizes.
+	-m MARGIN	Adjusts the calculated max. permissible bitrate by X kbps. Can be used to increase quality or to decrease file sizes.
 				DEFAULT:        0
-				EXAMPLE:        -m 3
+				EXAMPLE:        -m 3, -m -14.08
 
 	-q QUALITY	Specifies the -quality setting of libvpx-vp9. Better quality means higher compression but also longer
 			encoding times.
@@ -75,6 +77,10 @@ Arguments:
 	FULL EXAMPLE: $ bash 4webm.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1"
 
 EOF
+}
+
+Bitrate_Calc() {
+NOMINAL=$( echo "scale=2; ($1 * 2^20 * 0.008 / $DURATION)" | bc )
 }
 
 ################
@@ -107,8 +113,10 @@ tput sgr 0
 #####################
 
 Encode() {
-ffmpeg -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 1 -quality good -speed 4 $EXTRARG -an -f rawvideo -y /dev/null
-ffmpeg -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
+echo "Pass 1/2:"
+ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 1 -quality good -speed 4 $EXTRARG -an -f rawvideo -y /dev/null
+echo "Pass 2/2:"
+ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
 }
 
 while getopts "ab:e:i:lm:q:s:v:x:h" OPTS; do
@@ -175,7 +183,7 @@ then
     fi
 elif [[ $AUDIO == true ]] && [[ (( $BOARD != wsg || $BOARD != gif )) ]]
 then
-    echo "$( tput setaf 1)LIMIT ERROR: $( tput sgr 0 )The selected board does not support audio. Please deselect the audio flag \"-a\" or choose a board with audio compatibility."
+    echo "$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected board does not support audio. Please deselect the audio flag \"-a\" or choose a board with audio compatibility."
     exit
 fi
 
@@ -210,7 +218,7 @@ fi
 
 if [[ $( echo "$DURATION > $MAXDUR" | bc -l ) -eq 1 ]]
 then
-    echo "$( tput setaf 1)LIMIT ERROR: $( tput sgr 0 )The duration of the input medium exceeds the max. permissible duration ($MAXDUR s) for your selected board."
+    echo "$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The duration of the input medium exceeds the max. permissible duration ($MAXDUR s) for your selected board."
     echo "Specify a different board or cut the video file."
     exit
 fi
@@ -221,11 +229,12 @@ fi
 
 VRAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*bitrate: //p' | sed 's/\( kb\/s\)$//' )
 CRAT=$( echo "$VRAT + $ARAT" | bc )
-NOMINAL=$( echo "scale=2; ($FILESIZE * 2^20 * 0.008 / $DURATION) - $AUDIOADJ" | bc )
+Bitrate_Calc $FILESIZE
+NRATE=$( echo "$NOMINAL - $AUDIOADJ" | bc )
 
-if [[ $( echo "$NOMINAL < $CRAT" | bc -l ) -eq 1 ]]
+if [[ $( echo "$NRATE < $CRAT" | bc -l ) -eq 1 ]]
 then
-    BITRATE=$( echo "$NOMINAL - $MARGIN - 3" | bc )
+    BITRATE=$( echo "$NRATE - $MARGIN - $OVERHEAD" | bc )
 else
     BITRATE=$( echo "$CRAT - $MARGIN" | bc )
 fi
@@ -241,18 +250,18 @@ VRES=$( echo "$RES" | awk -F x '{print $2}' )
 
 if [[ $( echo "$HRES > 2048" | bc -l ) -eq 1 || $( echo "$VRES > 2048" | bc -l ) -eq 1 ]]
 then
-    echo "$( tput setaf 1)LIMIT ERROR: $( tput sgr 0 )The horizontal/vertical video resolution exceeds 2048p. Please scale/crop the video"
+    echo "$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The horizontal/vertical video resolution exceeds 2048p. Please scale/crop the video"
     exit
 fi
 
 MediaInfo
 
-echo -n "Proceed? [$( tput setaf 2)y$( tput sgr 0)/$(tput setaf 1)n$( tput sgr 0)]: "
+echo -n "Proceed? [$( tput setaf 2 )y$( tput sgr 0 )/$(tput setaf 1 )n$( tput sgr 0 )]: "
 read -r AFFIRM
 
 if [[ $AFFIRM == y ]]
 then
-    echo "Encoding..."
+    echo -e "\nEncoding"
     Encode
 else
     echo "Exiting..."
@@ -270,9 +279,23 @@ OUTSIZE=$( echo "scale=10; $OUTSIZE/(2^20)" | bc)
 
 if [[ $( echo "$OUTSIZE > $FILESIZE" | bc -l ) -eq 1 ]]
 then
-    echo "$( tput setaf 1)LIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
-    echo "Please rerun the script using a higher margin (\"-m X\") or change the target board."
+    DELTA=$( echo "$OUTSIZE - $FILESIZE" | bc  )
+    Bitrate_Calc $DELTA
+    echo -e "$( tput setaf 1 )\nLIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
+    echo "Rerunning with \"-m "$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )" \" may bring the file size back to within limits."
     exit
 fi
 
-echo "The output file size is: $( tput setaf 2)$OUTSIZE MiB$( tput sgr 0)"
+echo -e "\nThe output file size is: $( tput setaf 2 )$OUTSIZE MiB$( tput sgr 0 )"
+DELTA=$( echo "$FILESIZE - $OUTSIZE" | bc  )
+Bitrate_Calc $DELTA
+
+if [[ $( echo "$NOMINAL < $LOWLIMIT" | bc -l ) -eq 1 ]]
+then
+    exit
+elif [[ $( echo "($BITRATE + $NOMINAL) > $CRAT" | bc -l ) -eq 1 ]]
+then
+    exit
+else
+    echo "It may be possible to increase quality while staying within limits by setting \"-m "$( echo "scale=2; $MARGIN - $NOMINAL + 1" | bc)"\"."
+fi
