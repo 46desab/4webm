@@ -42,7 +42,7 @@ The help screen explains all flags and can be accessed via `$ ./4webm.sh -h`
 
 The script determines a suitable total bitrate for a two pass encoding and additionally ensures that all board limits are met (i.e. max. file size, duration and resolution). If the input file is already within board limitations, the output file will closely match it in both size and quality. Should the input file exceed board limitations, the script will select the max. permissible bitrate for the output.
 
-The script also suggests a value for the margin setting `-m`, should the output be above/significantly below board limits.
+The script also suggests a value for the margin setting `-m`, should the output be above/significantly below board limits. Alternatively, if audio was enabled, the script determines a reduced audio bitrate which reduces the file size (this option only re-encodes audio and is thus significantly faster than re-encoding the video again). 
 
 There are currently no flags to optimise for bandwidth or storage space, this can be worked around by setting a high margin `-m` or setting the target board to /bant/: `-b bant` (2MiB limit).
 

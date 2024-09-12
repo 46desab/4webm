@@ -6,6 +6,8 @@
 #
 ####################################################
 
+set -o errexit
+
 ############
 # DEFAULTS #
 ############
@@ -79,33 +81,72 @@ Arguments:
 EOF
 }
 
-Bitrate_Calc() {
+BitrateCalc() {
 NOMINAL=$( echo "scale=2; ($1 * 2^20 * 0.008 / $DURATION)" | bc )
 }
 
-################
-# CALC. OUTPUT #
-################
+Proceed() {
+echo -n "Proceed? [$( tput setaf 2 )y$( tput sgr 0 )/$(tput setaf 1 )n$( tput sgr 0 )]: "
+read -r AFFIRM
 
-MediaInfo() {
-tput setaf 6
-echo "========================================================================================================="
-echo "INPUT FILE:			$INFILE"
-echo "OUTPUT FILE:			${OUTFILE}.webm"
-echo "SELECTED BOARD:			/$BOARD/"
-echo "AUDIO:				$AUDIO"
-if [[ $AUDIO == true ]]
+if [[ $AFFIRM == y ]] && [[ $1 == fix ]]
 then
-    echo "AUDIO CODEC:			$LIBCA"
-    echo "AUDIO BITRATE: 			${AUDIOADJ} kbps"
+    echo -e "\nRe-encoding audio"
+    Reencode
+elif [[ $AFFIRM == y ]] && [[ -z $1 ]]
+then
+    echo -e "\nEncoding"
+    Encode
+else
+    echo -e "\nExiting..."
+    exit
 fi
-echo "VIDEO DURATION:			$DURATION s"
-echo "VIDEO CODEC:			$LIBCV"
-echo "CURRENT TOTAL BITRATE:		$CRAT kbps"
-echo "MAX. PERMISSIBLE BITRATE:	$NOMINAL kbps"
-echo "SELECTED VIDEO BITRATE:		$BITRATE kbps"
-echo "========================================================================================================="
-tput sgr 0
+}
+
+########################
+# OUTPUT FILE ANALYSIS #
+########################
+
+OutfileAnalysis() {
+
+if [[ $( echo "$OUTSIZE > $FILESIZE" | bc -l ) -eq 1 ]]
+then
+    DELTA=$( echo "$OUTSIZE - $FILESIZE" | bc  )
+    BitrateCalc $DELTA
+    echo -e "$( tput setaf 1 )\nLIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
+
+    if [[ $AUDIO == true ]] && [[ $( echo "$AUDIOADJ > 34" | bc -l ) -eq 1 ]]
+    then
+        AUDIOADJ=$( echo "scale=2; $AUDIOADJ - $NOMINAL - 1" | bc )
+        AUDIOPTS="-c:a $LIBCA -b:a ${AUDIOADJ}K"
+        echo "Re-encoding audio at $AUDIOADJ kbps to reduce the file size:"
+        Proceed fix
+        OutfileSize "${OUTFILEFIXED}_reencode.webm"
+    else
+        MARGIN=$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )
+        echo "Rerunning with \"-m $MARGIN \" may bring the file size back to within limits."
+    fi    
+    exit
+fi
+
+echo -e "\nThe output file size is: $( tput setaf 2 )$OUTSIZE MiB$( tput sgr 0 )"
+
+DELTA=$( echo "$FILESIZE - $OUTSIZE" | bc  )
+BitrateCalc $DELTA
+MARGIN=$( echo "scale=2; $MARGIN - $NOMINAL + 1" | bc)
+
+if [[ $( echo "$NOMINAL < $LOWLIMIT" | bc -l ) -eq 1 ]] || [[ $( echo "($BITRATE + $NOMINAL) > $CRAT" | bc -l ) -eq 1 ]]
+then
+    exit
+else
+    echo "It may be possible to increase quality while staying within limits by setting \"-m $MARGIN \"."
+fi
+}
+
+OutfileSize() {
+OUTSIZE=$( ls -l | grep $1 | awk '{print $5}' )
+OUTSIZE=$( echo "scale=10; $OUTSIZE/(2^20)" | bc)
+OutfileAnalysis
 }
 
 #####################
@@ -117,6 +158,11 @@ echo "Pass 1/2:"
 ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 1 -quality good -speed 4 $EXTRARG -an -f rawvideo -y /dev/null
 echo "Pass 2/2:"
 ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
+}
+
+Reencode() {
+echo "Pass 1/1:"
+ffmpeg -hide_banner -loglevel error -stats -i "${OUTFILE}.webm" -i "$INFILE" -c:v copy $AUDIOPTS -map 0:v:0 -map 1:a:0 -y "${OUTFILE}_reencode.webm"
 }
 
 while getopts "ab:e:i:lm:q:s:v:x:h" OPTS; do
@@ -229,7 +275,7 @@ fi
 
 VRAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*bitrate: //p' | sed 's/\( kb\/s\)$//' )
 CRAT=$( echo "$VRAT + $ARAT" | bc )
-Bitrate_Calc $FILESIZE
+BitrateCalc $FILESIZE
 NRATE=$( echo "$NOMINAL - $AUDIOADJ" | bc )
 
 if [[ $( echo "$NRATE < $CRAT" | bc -l ) -eq 1 ]]
@@ -254,48 +300,31 @@ then
     exit
 fi
 
-MediaInfo
+################
+# CALC. OUTPUT #
+################
 
-echo -n "Proceed? [$( tput setaf 2 )y$( tput sgr 0 )/$(tput setaf 1 )n$( tput sgr 0 )]: "
-read -r AFFIRM
-
-if [[ $AFFIRM == y ]]
+tput setaf 6
+echo "========================================================================================================="
+echo "INPUT FILE:			$INFILE"
+echo "OUTPUT FILE:			${OUTFILE}.webm"
+echo "SELECTED BOARD:			/$BOARD/"
+echo "AUDIO:				$AUDIO"
+if [[ $AUDIO == true ]]
 then
-    echo -e "\nEncoding"
-    Encode
-else
-    echo "Exiting..."
-    exit
+    echo "AUDIO CODEC:			$LIBCA"
+    echo "AUDIO BITRATE: 			${AUDIOADJ} kbps"
 fi
+echo "VIDEO DURATION:			$DURATION s"
+echo "VIDEO CODEC:			$LIBCV"
+echo "CURRENT TOTAL BITRATE:		$CRAT kbps"
+echo "MAX. PERMISSIBLE BITRATE:	$NOMINAL kbps"
+echo "SELECTED VIDEO BITRATE:		$BITRATE kbps"
+echo "========================================================================================================="
+tput sgr 0
+
+Proceed
+
+OutfileSize "${OUTFILEFIXED}.webm"
 
 rm ffmpeg2pass-0.log
-
-########################
-# OUTPUT FILE ANALYSIS #
-########################
-
-OUTSIZE=$( ls -l | grep "${OUTFILEFIXED}.webm" | awk '{print $5}' )
-OUTSIZE=$( echo "scale=10; $OUTSIZE/(2^20)" | bc)
-
-if [[ $( echo "$OUTSIZE > $FILESIZE" | bc -l ) -eq 1 ]]
-then
-    DELTA=$( echo "$OUTSIZE - $FILESIZE" | bc  )
-    Bitrate_Calc $DELTA
-    echo -e "$( tput setaf 1 )\nLIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
-    echo "Rerunning with \"-m "$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )" \" may bring the file size back to within limits."
-    exit
-fi
-
-echo -e "\nThe output file size is: $( tput setaf 2 )$OUTSIZE MiB$( tput sgr 0 )"
-DELTA=$( echo "$FILESIZE - $OUTSIZE" | bc  )
-Bitrate_Calc $DELTA
-
-if [[ $( echo "$NOMINAL < $LOWLIMIT" | bc -l ) -eq 1 ]]
-then
-    exit
-elif [[ $( echo "($BITRATE + $NOMINAL) > $CRAT" | bc -l ) -eq 1 ]]
-then
-    exit
-else
-    echo "It may be possible to increase quality while staying within limits by setting \"-m "$( echo "scale=2; $MARGIN - $NOMINAL + 1" | bc)"\"."
-fi
