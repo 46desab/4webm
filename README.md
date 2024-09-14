@@ -31,8 +31,8 @@ Flags:
 * `-m 10` sets the video bitrate **margin** to **10** kb/s, this margin is subsequently subtracted[^1] from the calculated bitrate and can be used to decrease file sizes, e.g., if the script failed to produce a webm within board limits (which is rare, but can happen) or to increase quality if the script produced a file that's significantly below limits
 * `-q best` sets the **quality** setting of *libvpx-vp9* to **best**, users can choose from **realtime**, **good** and **best**. This setting affects compression efficiency
 * `-v 0` sets the **speed** setting of *libvpx-vp9* to 0, users can set this in the range **0-5** with 0 having the best compression and 5 the lowest
-* `-s 00:00:10.500 -e 00:01:19.690` sets the **start** and **end** points. Users can choose to use either one of them or both.
-* `-x "-vf eq=saturation=1.1,scale=-1:720 -aspect 16:9"` this specifies additional settings to be handed over to *ffmpeg*, for further reference, [consult the ffmpeg manuals.](https://trac.ffmpeg.org/wiki#Filtering "ffmpeg documentation")
+* `-s 00:00:10.500 -e 00:01:19.690` sets the **start** and **end** points. Users can choose to use none, either one of them or both.
+* `-x "-vf eq=saturation=1.1,scale=-1:720 -aspect 16:9"` this specifies additional settings to be handed over to *ffmpeg*, for further reference, [consult the ffmpeg manuals.](https://trac.ffmpeg.org/wiki "ffmpeg documentation")
 
 * (not shown) `-l` changes the video and audio codices to *libvpx* (VP8) and *libvorbis*. This also means that `-q` and `-v` are no longer functional. This should only be used for compatibility (**legacy**) purposes.
 
@@ -40,9 +40,9 @@ The help screen explains all flags and can be accessed via `$ ./4webm.sh -h`
 
 ## Default behaviour
 
-The script determines a suitable total bitrate for a two pass encoding and additionally ensures that all board limits are met (i.e. max. file size, duration and resolution). If the input file is already within board limitations, the output file will closely match it in both size and quality. Should the input file exceed board limitations, the script will select the max. permissible bitrate for the output.
+The script determines a suitable total bitrate for a two pass encoding and additionally ensures that all board limits are met (i.e. max. file size, duration and resolution). If the input file is already within board limitations, the output file will closely match it in both size and quality. Should the input file exceed board limitations, the max. permissible bitrate for the output will be automatically selected.
 
-The script also suggests a value for the margin setting `-m`, should the output be above/significantly below board limits. Alternatively, if audio was enabled, the script determines a reduced audio bitrate which reduces the file size (this option only re-encodes audio and is thus significantly faster than re-encoding the video again). 
+The script also suggests a value for the margin setting `-m`, should the output be above/significantly below board limits. Alternatively, if audio was enabled, a lower audio bitrate is determined which reduces the file size (this option only re-encodes audio and is thus significantly faster than re-encoding the video again). 
 
 There are currently no flags to optimise for bandwidth or storage space, this can be worked around by setting a high margin `-m` or setting the target board to /bant/: `-b bant` (2MiB limit).
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# RDEPEND: ffmpeg, gawk, sed, grep, bc
+# RDEPEND: ffmpeg, gawk, sed, grep, bc, date
 #
 # 4webm: A simple webm converter script using ffmpeg
 #
@@ -71,12 +71,12 @@ Arguments:
 				DEFAULT:	1
 				EXAMPLE:	-v 2
 
-	-x EXTRA	Specifies additional ffmpeg parameters. Needs to be delimited by " ".  Can be used to scale, crop, filter etc.
+	-x EXTRA	Specifies additional ffmpeg parameters. Needs to be delimited by " ".  Can be used to scale, crop, filter etc. (pass filter arguments only using -vf).
 			Please refer to the ffmpeg manual for more information.
 				DEFAULT:	No additional options
 				EXAMPLE:	-x "-vf scale=-1:720 -aspect 16:9"
 
-	FULL EXAMPLE: $ bash 4webm.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1"
+	FULL EXAMPLE: $ bash 4webm.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1,crop=200:100:100:0"
 
 EOF
 }
@@ -144,7 +144,7 @@ fi
 }
 
 OutfileSize() {
-OUTSIZE=$( ls -l | grep $1 | awk '{print $5}' )
+OUTSIZE=$( ls -l | grep "$1" | awk '{print $5}' )
 OUTSIZE=$( echo "scale=10; $OUTSIZE/(2^20)" | bc)
 OutfileAnalysis
 }
@@ -158,6 +158,7 @@ echo "Pass 1/2:"
 ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 1 -quality good -speed 4 $EXTRARG -an -f rawvideo -y /dev/null
 echo "Pass 2/2:"
 ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
+rm ffmpeg2pass-0.log
 }
 
 Reencode() {
@@ -219,7 +220,7 @@ else
     MAXDUR="120"
 fi
 
-if [[ $AUDIO == true ]] && [[ (( $BOARD == wsg || $BOARD == gif )) ]]
+if [[ $AUDIO == true ]] && [[ $BOARD == wsg || $BOARD == gif || $BOARD == wsr ]]
 then
     AUDIOPTS="-c:a $LIBCA -b:a ${AUDIOADJ}K"
     ARAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*fltp, //p' | sed 's/\( kb\/s\ (default)\)$//' )
@@ -227,7 +228,7 @@ then
     then
     	ARAT="128"
     fi
-elif [[ $AUDIO == true ]] && [[ (( $BOARD != wsg || $BOARD != gif )) ]]
+elif [[ $AUDIO == true ]] && [[ $BOARD != wsg || $BOARD != gif || $BOARD != wsr ]]
 then
     echo "$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected board does not support audio. Please deselect the audio flag \"-a\" or choose a board with audio compatibility."
     exit
@@ -294,6 +295,27 @@ RES=$( ffprobe "$INFILE" 2>&1 | grep -o -E [0-9]\{2,4\}x[0-9]\{2,4\} )
 HRES=$( echo "$RES" | awk -F x '{print $1}' )
 VRES=$( echo "$RES" | awk -F x '{print $2}' )
 
+if [[ -n $EXTRARG ]]
+then
+    SELHRES=$( echo $EXTRARG | grep -o -E \\-vf.*scale=-?[0-9]+:-?[0-9]+ | sed 's/-vf.*scale=//' | awk -F : '{print ($1)}' )
+    SELVRES=$( echo $EXTRARG | grep -o -E \\-vf.*scale=-?[0-9]+:-?[0-9]+ | sed 's/-vf.*scale=//' | awk -F : '{print ($2)}' )
+
+    if [[ -n $SELHRES ]] && [[ $( echo "$SELHRES > 2048" | bc -l ) -eq 1 || $(echo "$SELVRES > 2048" | bc -l ) -eq 1 ]]
+    then
+        echo "$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected horizontal/vertical video resolution exceeds 2048p."
+        exit
+    fi
+
+    HCROP=$( echo $EXTRARG | grep -o -E \\-vf.*crop=[0-9]+:[0-9]+ | sed 's/-vf.*crop=//' | awk -F : '{print ($1)}' )
+    VCROP=$( echo $EXTRARG | grep -o -E \\-vf.*crop=[0-9]+:[0-9]+ | sed 's/-vf.*crop=//' | awk -F : '{print ($2)}' )
+
+    if  [[ -n $HCROP ]] && [[ $( echo "$HCROP > 2048" | bc -l ) -eq 1 || $(echo "$VCROP > 2048" | bc -l ) -eq 1 ]]
+    then
+        echo "$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The cropped horizontal/vertical video resolution exceeds 2048p."
+        exit
+    fi
+fi
+
 if [[ $( echo "$HRES > 2048" | bc -l ) -eq 1 || $( echo "$VRES > 2048" | bc -l ) -eq 1 ]]
 then
     echo "$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The horizontal/vertical video resolution exceeds 2048p. Please scale/crop the video"
@@ -326,5 +348,3 @@ tput sgr 0
 Proceed
 
 OutfileSize "${OUTFILEFIXED}.webm"
-
-rm ffmpeg2pass-0.log
