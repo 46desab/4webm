@@ -12,7 +12,7 @@ set -o errexit
 # DEFAULTS #
 ############
 
-AUDIO=false
+AUDIO="false"
 AUDIOPTS="-an"
 AUDIOADJ="0"
 ARAT="0"
@@ -21,7 +21,6 @@ LIBCV="libvpx-vp9"
 LIBCA="libopus"
 MARGIN="0"
 QUALITY="good"
-SPEED="1"
 EXTRARG=""
 LOWLIMIT="10"
 OVERHEAD="3"
@@ -35,9 +34,8 @@ Arguments:
 	-i INPUT FILE $( tput setaf 1 )(REQUIRED!)$( tput sgr 0 ) Specifies the input file to be used, output file name will be "inputfilename_DATE_TIME.webm"
 				EXAMPLE:	-i inputfilename.mp4
 
-	-a AUDIO	Toggles audio and allows for a bitrate specification. Can only be used in conjunction with boards: /wsg/ and /gif/.
-				DEFAULT:	OFF: No audio
-						ON: 96kbps
+	-a AUDIO	Toggles audio and allows for a bitrate specification. Can only be used in conjunction with boards: /wsg/,/wsr/,/gif/.
+				DEFAULT:	OFF (no audio)
 				EXAMPLE:	-a, -a 128
 
 	-b BOARD	Selects the intended board. Max. file size, duration and audio will be determined by this.
@@ -46,8 +44,7 @@ Arguments:
 
 	-l LEGACY	Changes the codices to VP8 and VORBIS. Only enable for compatibility purposes. Audio is still controlled
 			via "-a".
-				DEFAULT:        OFF: VP9 + OPUS
-							ON: VP8 + VORBIS
+				DEFAULT:        OFF (VP9 + OPUS)
 				EXAMPLE:        -l
 
 	-m MARGIN	Adjusts the calculated max. permissible bitrate by X kbps. Can be used to increase quality or to decrease file sizes.
@@ -68,7 +65,7 @@ Arguments:
 
 	-v SPEED	Specifies the -speed setting of libvpx-vp9. Lower speed mean higher compression but also longer
 			encoding times.
-				DEFAULT:	1
+				DEFAULT:	<720p --> 1, >=720p --> 2
 				EXAMPLE:	-v 2
 
 	-x EXTRA	Specifies additional ffmpeg parameters. Needs to be delimited by " ".  Can be used to scale, crop, filter etc. (pass filter arguments only using -vf).
@@ -178,16 +175,16 @@ while getopts "ab:e:i:lm:q:s:v:x:h" OPTS; do
 			 level=1
 			 AUDIOADJ="96"
 		 fi;;
-	  i) INFILE="$OPTARG";;
 	  b) BOARD="$OPTARG";;
 	  e) ETIME=true
-	     END="$OPTARG";;
+	      END="$OPTARG";;
+	  i) INFILE="$OPTARG";;
 	  l) LIBCV="libvpx"
-		 LIBCA="libvorbis";;
+	     LIBCA="libvorbis";;
 	  m) MARGIN="$OPTARG";;
 	  q) QUALITY="$OPTARG";;
 	  s) STIME=true
-		 START="$OPTARG";;
+	      START="$OPTARG";;
 	  v) SPEED="$OPTARG";;
 	  x) EXTRARG="$OPTARG";;
 	  h) Help
@@ -198,7 +195,6 @@ while getopts "ab:e:i:lm:q:s:v:x:h" OPTS; do
 		 exit 1;;
       esac
 done
-
 
 OUTFILE="$( echo "$INFILE" | sed 's/\(\.\w\{3,4\}\)$//' )""_$( date +%F_%T )"
 OUTFILEFIXED=$( echo "$OUTFILE" | sed 's/\[/\\\[/g' | sed 's/\]/\\\]/g' )
@@ -291,7 +287,7 @@ fi
 ####################
 
 RES=$( ffprobe "$INFILE" 2>&1 | grep -o -E [0-9]\{2,4\}x[0-9]\{2,4\} )
-#FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+ fps" | sed 's/\( fps.*\)$//' )
+#FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? fps" | sed 's/\( fps.*\)$//' )
 HRES=$( echo "$RES" | awk -F x '{print $1}' )
 VRES=$( echo "$RES" | awk -F x '{print $2}' )
 
@@ -322,6 +318,24 @@ then
     exit
 fi
 
+if [[ -n $SELHRES ]]
+then
+    HRES="$SELHRES"
+    VRES="$SELVRES"
+elif [[ -n $HCROP ]]
+then
+    HRES="$HCROP"
+    VRES="$VCROP"
+fi
+
+if [[ -z $SPEED && $( echo "$VRES >= 720" | bc -l ) -eq 1 ]]
+then
+    SPEED="2"
+elif [[ -z $SPEED ]]
+then
+    SPEED="1"
+fi
+
 ################
 # CALC. OUTPUT #
 ################
@@ -339,9 +353,14 @@ then
 fi
 echo "VIDEO DURATION:			$DURATION s"
 echo "VIDEO CODEC:			$LIBCV"
+echo "SELECTED RESOLUTION:		$HRES x $VRES"
 echo "CURRENT TOTAL BITRATE:		$CRAT kbps"
 echo "MAX. PERMISSIBLE BITRATE:	$NOMINAL kbps"
 echo "SELECTED VIDEO BITRATE:		$BITRATE kbps"
+if [[ -n $EXTRARG ]]
+then
+    echo "FFMPEG ARGUMENTS:		$EXTRARG"
+fi
 echo "========================================================================================================="
 tput sgr 0
 
