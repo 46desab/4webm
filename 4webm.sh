@@ -160,40 +160,37 @@ rm ffmpeg2pass-0.log
 
 Reencode() {
 echo "Pass 1/1:"
-ffmpeg -hide_banner -loglevel error -stats -i "${OUTFILE}.webm" -i "$INFILE" -c:v copy $AUDIOPTS -map 0:v:0 -map 1:a:0 -y "${OUTFILE}_reencode.webm"
+ffmpeg -hide_banner -loglevel error -stats -i "${OUTFILE}.webm" -i "$INFILE" -c:v copy $AUDIOPTS -map 0:v:0 -map 1:a:0 -shortest -y "${OUTFILE}_reencode.webm"
 }
 
 while getopts "ab:e:i:lm:q:s:v:x:h" OPTS; do
-      case "$OPTS" in
-	  a) AUDIO=true
-		 eval NEXTOPT=${!OPTIND}
-		 if [[ -n $NEXTOPT ]] && [[ $NEXTOPT != -* ]]
-		 then
-		     OPTIND=$((OPTIND + 1))
-		     AUDIOADJ=$NEXTOPT
-		 else
-			 level=1
-			 AUDIOADJ="96"
-		 fi;;
-	  b) BOARD="$OPTARG";;
-	  e) ETIME=true
-	      END="$OPTARG";;
-	  i) INFILE="$OPTARG";;
-	  l) LIBCV="libvpx"
-	     LIBCA="libvorbis";;
-	  m) MARGIN="$OPTARG";;
-	  q) QUALITY="$OPTARG";;
-	  s) STIME=true
-	      START="$OPTARG";;
-	  v) SPEED="$OPTARG";;
-	  x) EXTRARG="$OPTARG";;
-	  h) Help
-		 exit 1;;
-	  ?) Help
-		 exit 1;;
-	  :) Help
-		 exit 1;;
-      esac
+    case "$OPTS" in
+        a) AUDIO=true
+	    eval NEXTOPT=${!OPTIND}
+	    if [[ -n $NEXTOPT ]] && [[ $NEXTOPT != -* ]]
+	    then
+	        OPTIND=$((OPTIND + 1))
+	        AUDIOADJ=$NEXTOPT
+	    else
+	        AUDIOADJ="96"
+	    fi;;
+	b) BOARD="$OPTARG";;
+	e) END="$OPTARG";;
+	i) INFILE="$OPTARG";;
+	l) LIBCV="libvpx"
+	   LIBCA="libvorbis";;
+	m) MARGIN="$OPTARG";;
+	q) QUALITY="$OPTARG";;
+	s) START="$OPTARG";;
+	v) SPEED="$OPTARG";;
+	x) EXTRARG="$OPTARG";;
+	h) Help
+	   exit 1;;
+	?) Help
+	   exit 1;;
+	:) Help
+	   exit 1;;
+    esac
 done
 
 OUTFILE="$( echo "$INFILE" | sed 's/\(\.\w\{3,4\}\)$//' )""_$( date +%F_%T )"
@@ -234,21 +231,21 @@ fi
 # DURATION CHECK #
 ##################
 
-if [[ $STIME == true ]] && [[ $ETIME == true ]]
+if [[ -n $START ]] && [[ -n $END ]]
 then
     S=$( echo "$START" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
     E=$( echo "$END" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
     DURATION=$( echo "$E - $S" | bc )
     STARG="-ss $START"
     ETARG="-to $END"
-elif [[ $STIME == true ]] && [[ $ETIME != true ]]
+elif [[ -n $START ]] && [[ -z $END ]]
 then
     S=$( echo "$START" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
     E=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*Duration: //p' | sed -n 's/\(,.*\)$//p' | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
     DURATION=$( echo "$E - $S" | bc )
     STARG="-ss $START"
     ETARG=""
-elif [[ $STIME != true ]] && [[ $ETIME == true ]]
+elif [[ -z $START ]] && [[ -n $END ]]
 then
     S="0"
     E=$( echo "$END" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
@@ -287,7 +284,7 @@ fi
 ####################
 
 RES=$( ffprobe "$INFILE" 2>&1 | grep -o -E [0-9]\{2,4\}x[0-9]\{2,4\} )
-#FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? fps" | sed 's/\( fps.*\)$//' )
+FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? fps" | sed 's/\( fps.*\)$//' )
 HRES=$( echo "$RES" | awk -F x '{print $1}' )
 VRES=$( echo "$RES" | awk -F x '{print $2}' )
 
@@ -341,27 +338,32 @@ fi
 ################
 
 tput setaf 6
-echo "========================================================================================================="
-echo "INPUT FILE:			$INFILE"
-echo "OUTPUT FILE:			${OUTFILE}.webm"
-echo "SELECTED BOARD:			/$BOARD/"
-echo "AUDIO:				$AUDIO"
-if [[ $AUDIO == true ]]
+cat << EOF
+=========================================================================================================
+INPUT FILE:			$INFILE
+OUTPUT FILE:			${OUTFILE}.webm
+SELECTED BOARD:			/$BOARD/
+
+AUDIO:				$AUDIO
+$( if [[ $AUDIO == true ]]
 then
     echo "AUDIO CODEC:			$LIBCA"
     echo "AUDIO BITRATE: 			${AUDIOADJ} kbps"
-fi
-echo "VIDEO DURATION:			$DURATION s"
-echo "VIDEO CODEC:			$LIBCV"
-echo "SELECTED RESOLUTION:		$HRES x $VRES"
-echo "CURRENT TOTAL BITRATE:		$CRAT kbps"
-echo "MAX. PERMISSIBLE BITRATE:	$NOMINAL kbps"
-echo "SELECTED VIDEO BITRATE:		$BITRATE kbps"
-if [[ -n $EXTRARG ]]
+fi )
+VIDEO DURATION:			$DURATION s
+VIDEO CODEC:			$LIBCV
+SELECTED RESOLUTION:		$HRES x $VRES
+VIDEO FRAMERATE:		$FRATE fps
+
+CURRENT TOTAL BITRATE:		$CRAT kbps
+MAX. PERMISSIBLE BITRATE:	$NOMINAL kbps
+SELECTED VIDEO BITRATE:		$BITRATE kbps
+$( if [[ -n $EXTRARG ]]
 then
     echo "FFMPEG ARGUMENTS:		$EXTRARG"
-fi
-echo "========================================================================================================="
+fi )
+=========================================================================================================
+EOF
 tput sgr 0
 
 Proceed
