@@ -15,7 +15,7 @@ The absolute minimum command required to transcode media into 4chan compatible w
 ```bash
 $ ./4webm.sh -i input.mp4
 ```
- The output file name will always be `inputfilename_DATE_TIME.webm`. If a different max. file size, duration and audio compatibility is desired, specify a board and enable the audio flag:
+ Unless a name is specified with `-o`, the output file name will default to `inputfilename_DATE_TIME.webm`. If a different max. file size, duration and audio compatibility is desired, specify a board and enable the audio flag:
 
 ```bash
 $ ./4webm.sh -i input.mp4 -b wsg -a
@@ -28,7 +28,7 @@ $ ./4webm.sh -i input.mp4 -b wsg -a 128 -m 10 -q best -v 0 -s 00:00:10.500 -e 00
 
 Flags:
 * **(REQUIRED)** `-i input.mp4` specifies the **input file**
-* `-b wsg` specifies **/wsg/** as the target board. Leaving this flag out will default the board setting to **/g/** (which shares the same limits with basically 90% of all boards).
+* `-b wsg` specifies **/wsg/** as the target board. Leaving this flag out will default the board setting to **/g/** (which shares the same limits with basically 90% of all boards)
 * `-a 128` enables **audio** and sets the desired audio bitrate to **128** kb/s. Without specifying a bitrate, it defaults it to 96 kb/s
 * `-m 10` sets the video bitrate **margin** to **10** kb/s, this margin is subsequently subtracted[^1] from the calculated bitrate and can be used to decrease file sizes, e.g., if the script failed to produce a webm within board limits (which is rare, but can happen) or to increase quality if the script produced a file that's significantly below limits
 * `-q best` sets the **quality** setting of *libvpx-vp9* to **best**, users can choose from **realtime**, **good** and **best**. This setting affects compression efficiency
@@ -36,9 +36,11 @@ Flags:
 * `-s 00:00:10.500 -e 00:01:19.690` sets the **start** and **end** points. Users can choose to use none, either one of them or both.
 * `-x "-vf eq=saturation=1.1,scale=-1:720 -aspect 16:9"` this specifies additional settings to be handed over to *ffmpeg*, for further reference, [consult the ffmpeg manuals.](https://trac.ffmpeg.org/wiki "ffmpeg documentation")
 
-* (not shown) `-l` changes the video and audio codices to *libvpx* (VP8) and *libvorbis*. This also means that `-q` and `-v` are no longer functional. This should only be used for compatibility (**legacy**) purposes.
+* (not shown) `-l` changes the video and audio codices to *libvpx* (VP8) and *libvorbis*. This also means that `-q` and `-v` are no longer functional. This should only be used for compatibility (**legacy**) purposes
 
-* (new) `-t` changes the VP9 encoder to SVT-VP9. Requires SvtVp9EncApp in `$PATH` or locally. Skips two-pass encoding.[^2]
+* (not shown) `-o` specifies the desired output name
+
+* **(new)** `-t` changes the VP9 encoder to SVT-VP9. Requires SvtVp9EncApp in `$PATH` or locally. Skips two-pass encoding[^2]
 
 The help screen explains all flags and can be accessed via `$ ./4webm.sh -h`
 
@@ -52,7 +54,9 @@ There are currently no flags to optimise for bandwidth or storage space, this ca
 
 ## Alternative encoder: SVT-VP9
 
-Running the script with `-t` enabled sets the VP9 encoder to SVT-VP9. Optimisations for SvtVp9EncApp are automatically determined. Using SVT-VP9 instead of libvpx-vp9 will result in a significant encoding speed boost of 10x-100x (depending on `-v` setting and system specs). Tradeoffs are a reduction in compression efficiency and visual quality at lower bitrates. Additionally, only a single pass can be made, which is less efficient than a two-pass approach.
+Running the script with `-t` enabled sets the VP9 encoder to SVT-VP9. Optimisations for SvtVp9EncApp are automatically determined. Using SVT-VP9 instead of libvpx-vp9 will result in a significant encoding speed boost of **10x-100x** (depending on `-v` setting and system specs). Tradeoffs are a *reduction* in *compression efficiency* and *visual quality* at lower bitrates. Additionally, only a single pass can be made, which is less efficient than a two-pass approach.
+
+SVT-VP9 tends to produce files with bitrates below the target bitrate, which means that multiple passes with different margin settings may be advisable in order to achieve the highest possible quality (a tradeoff for the high encoding speed).
 
 [^1]: Currently, a positive margin value reduces the total bitrate, while a negative value increases it. This should probably be changed, but for now, it'll work.
-[^2]: No audio compatibility for now. Known issues: scrubbing is broken.
+[^2]: Audio compatibility and scrubbing have been fixed, but it's still mostly a bodge, so expect weird issues.

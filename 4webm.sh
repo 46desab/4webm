@@ -53,6 +53,11 @@ Arguments:
 				DEFAULT:        0
 				EXAMPLE:        -m 3, -m -14.08
 
+        -o OUTPUT FILE Specifies the output file name. If not set, output file name will default to "input_DATE_TIME.webm". Unicode characters are supported,
+	   	       but the file name needs to be delimited by " ".
+        	                DEFAULT:       (default name)
+				EXAMPLE:       -o output_file_name
+
 	-q QUALITY	Specifies the -quality setting of libvpx-vp9. Better quality means higher compression but also longer
 			encoding times.
 				DEFAULT:	good
@@ -122,19 +127,25 @@ then
     DELTA=$( echo "$OUTSIZE - $FILESIZE" | bc  )
     BitrateCalc $DELTA
     echo -e "$( tput setaf 1 )\nLIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
+    MARGIN=$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )
 
-    if [[ $AUDIO == true ]] && [[ $( echo "$AUDIOADJ > 34" | bc -l ) -eq 1 ]]
+    if [[ $AUDIO == true ]]
     then
         AUDIOADJ=$( echo "scale=2; $AUDIOADJ - $NOMINAL - 1" | bc )
         AUDIOPTS="-c:a $LIBCA -b:a ${AUDIOADJ}K"
-        echo "Re-encoding audio at $AUDIOADJ kbps to reduce the file size:"
-        Proceed fix
-        OutfileSize "${OUTFILEFIXED}_reencode.webm"
+	if [[ $( echo "$AUDIOADJ > 32" | bc -l ) -eq 1 ]]
+	then
+            echo "Re-encode audio at $AUDIOADJ kbps to reduce the file size?"
+            Proceed fix
+            OutfileSize "${OUTFILEFIXED}_reencode.webm"
+	else
+	    echo "Audio re-encode not possible as the resulting audio bitrate would drop below the threshold of 32 kbps. Rerun with \"-m $MARGIN\"."
+	    exit
+	fi
     else
-        MARGIN=$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )
         echo "Rerunning with \"-m $MARGIN \" may bring the file size back to within limits."
-    fi    
-    exit
+        exit
+    fi
 fi
 
 echo -e "\nThe output file size is: $( tput setaf 2 )$OUTSIZE MiB$( tput sgr 0 )"
@@ -143,11 +154,15 @@ DELTA=$( echo "$FILESIZE - $OUTSIZE" | bc  )
 BitrateCalc $DELTA
 MARGIN=$( echo "scale=2; $MARGIN - $NOMINAL + 1" | bc)
 
-if [[ $( echo "$NOMINAL < $LOWLIMIT" | bc -l ) -eq 1 ]] || [[ $( echo "($BITRATE + $NOMINAL) > $CRAT" | bc -l ) -eq 1 ]]
+if [[ $( echo "$NOMINAL < $LOWLIMIT" | bc -l ) -eq 1 ]]
 then
     exit
 else
     echo "It may be possible to increase quality while staying within limits by setting \"-m $MARGIN \"."
+    if [[ $LIBCV == "svt-vp9" ]]
+    then
+	echo "This is advisable for SVT-VP9 encoded media, if the output file size is significantly below limits."
+    fi
 fi
 }
 
@@ -167,64 +182,62 @@ ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBC
 echo "Pass 2/2:"
 ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
 rm ffmpeg2pass-0.log
+OutfileSize "${OUTFILEFIXED}.webm"
 }
 
 AudioEncode() {
 echo "Pass 1/1:"
-ffmpeg -hide_banner -loglevel error -stats -i "$1" -i "$INFILE" -c:v copy $AUDIOPTS -map 0:v:0 -map 1:a:0 -shortest -y "${OUTFILE}_reencode.webm"
+ffmpeg -hide_banner -loglevel error -stats -i "$1" -i "$INFILE" -map 0:v:0 -c:v copy -map 1:a:0 $AUDIOPTS -shortest -map_metadata -1 -y "${OUTFILE}_reencode.webm"
 }
 
 SvtVp9Encode() {
 BITRATE=$( echo "$BITRATE * 1000" | bc )
-KEYSPACE=$( echo "$FRATE * 8" | bc )
+KEYSPACE="7"
 NUM=$( echo "$FRATE * 100" | bc )
 DENOM="100"
 
-if [[ $( echo "$KEYSPACE > 255" | bc -l ) -eq 1 &&  $( echo "scale=0; $FRATE%25" | bc ) -eq 0 ]]
-then
-    KEYSPACE="200"
-elif [[ $( echo "$KEYSPACE > 255" | bc -l ) -eq 1 &&  $( echo "scale=0; $FRATE%30" | bc ) -eq 0 ]]
-then
-    KEYSPACE="240"
-elif [[ $( echo "$KEYSPACE > 255" | bc -l ) -eq 1 ]]
-then
-    KEYSPACE="-2"
-fi
+#SVT-VP9 is behaving weirdly (or I can't get it running right), but
+#it's a very valuable tool to have, so I'm still leaving it as an option.
+#In any case, keyframe spacing and the resulting GOP size causes all
+#sorts of issues. Hardcoding it to a low value seems to fix it for now.
 
 echo -e "\nDemuxing, Stage 1/2:"
-ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG $EXTRARG -y raw.yuv
+ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG $EXTRARG -pix_fmt yuv420p -f rawvideo -y raw.yuv
 echo -e "\nEncoding, Stage 2/2:"
-$SVTDIR/SvtVp9EncApp -i raw.yuv -w $HRES -h $VRES -intra-period $KEYSPACE -fps-num $NUM -fps-denom $DENOM -rc 1 -tbr $BITRATE -enc-mode $SPEED -b "${OUTFILE}.webm"
+$SVTDIR/SvtVp9EncApp -i raw.yuv -w $HRES -h $VRES -intra-period $KEYSPACE -fps-num $NUM -fps-denom $DENOM -rc 1 -tbr $BITRATE -min-qp 0 -max-qp 60 -tune 0 -enc-mode $SPEED -b "${OUTFILE}.ivf"
 
-#if [[ $AUDIO == true ]]
-#then
-#    echo -e "\nMuxing audio 1/1:"
-#    AudioEncode "${OUTFILE}.webm"
-#else
-#    ffmpeg -fflags +igndts -i "${OUTFILE}.ivf" -c:v copy -y "${OUTFILE}.webm" 
-#fi
+if [[ $AUDIO == true ]]
+then
+    echo -e "\nMuxing audio 1/1:"
+    AudioEncode "${OUTFILE}.ivf"
+    OutfileSize "${OUTFILEFIXED}_reencode.webm"
+else
+    ffmpeg -i "${OUTFILE}.ivf" -c:v copy -map_metadata -1 -y "${OUTFILE}.webm"
+    OutfileSize "${OUTFILEFIXED}.webm"
+fi
 
-#rm "${OUTFILE}.ivf"
+rm "${OUTFILE}.ivf"
 rm raw.yuv
 }
 
-while getopts "ab:e:i:lm:q:s:tv:x:h" OPTS; do
+while getopts "ab:e:i:lm:o:q:s:tv:x:h" OPTS; do
     case "$OPTS" in
 	a) AUDIO=true
-	    eval NEXTOPT=${!OPTIND}
-	    if [[ -n $NEXTOPT ]] && [[ $NEXTOPT != -* ]]
-	    then
-	        OPTIND=$((OPTIND + 1))
-	        AUDIOADJ=$NEXTOPT
-	    else
-	        AUDIOADJ="96"
-	    fi;;
+	   eval NEXTOPT=${!OPTIND}
+	   if [[ -n $NEXTOPT ]] && [[ $NEXTOPT != -* ]]
+	   then
+	       OPTIND=$((OPTIND + 1))
+	       AUDIOADJ=$NEXTOPT
+	   else
+	       AUDIOADJ="96"
+	   fi;;
 	b) BOARD="$OPTARG";;
 	e) END="$OPTARG";;
 	i) INFILE="$OPTARG";;
 	l) LIBCV="libvpx"
 	   LIBCA="libvorbis";;
 	m) MARGIN="$OPTARG";;
+	o) OUTFILE="$OPTARG";;
 	q) QUALITY="$OPTARG";;
 	s) START="$OPTARG";;
 	t) OVERHEAD="5"
@@ -240,7 +253,11 @@ while getopts "ab:e:i:lm:q:s:tv:x:h" OPTS; do
     esac
 done
 
-OUTFILE="$( echo "$INFILE" | sed 's/\(\.\w\{3,4\}\)$//' )""_$( date +%F_%T )"
+if [[ -z $OUTFILE ]]
+then
+    OUTFILE="$( echo "$INFILE" | sed 's/\(\.\w\{3,4\}\)$//' )""_$( date +%F_%T )"
+fi
+
 OUTFILEFIXED=$( echo "$OUTFILE" | sed 's/\[/\\\[/g' | sed 's/\]/\\\]/g' )
 
 ##########################
@@ -314,12 +331,11 @@ fi
 # BITRATE CALCULATION #
 #######################
 
-VRAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*bitrate: //p' | sed 's/\( kb\/s\)$//' )
-CRAT=$( echo "$VRAT + $ARAT" | bc )
+CRAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*bitrate: //p' | sed 's/\( kb\/s\)$//' )
 BitrateCalc $FILESIZE
 NRATE=$( echo "$NOMINAL - $AUDIOADJ" | bc )
 
-if [[ $( echo "$NRATE < $CRAT" | bc -l ) -eq 1 ]]
+if [[ $( echo "$NOMINAL < $CRAT" | bc -l ) -eq 1 ]]
 then
     BITRATE=$( echo "$NRATE - $MARGIN - $OVERHEAD" | bc )
 else
@@ -331,9 +347,15 @@ fi
 ####################
 
 RES=$( ffprobe "$INFILE" 2>&1 | grep -o -E [0-9]\{2,4\}x[0-9]\{2,4\} )
-FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? fps" | sed 's/\( fps.*\)$//' )
 HRES=$( echo "$RES" | awk -F x '{print $1}' )
 VRES=$( echo "$RES" | awk -F x '{print $2}' )
+
+FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? tbr" | sed 's/\( tbr.*\)$//' )
+if [[ -z $FRATE ]]
+then
+    FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? fps" | sed 's/\( fps.*\)$//' )
+fi
+
 
 if [[ -n $EXTRARG ]]
 then
@@ -386,33 +408,33 @@ fi
 
 tput setaf 6
 cat << EOF
-=========================================================================================================
+===================================================================================================
 INPUT FILE:			$INFILE
 OUTPUT FILE:			${OUTFILE}.webm
 SELECTED BOARD:			/$BOARD/
-
 AUDIO:				$AUDIO
-$( if [[ $AUDIO == true ]]
+EOF
+if [[ $AUDIO == true ]]
 then
     echo "AUDIO CODEC:			$LIBCA"
     echo "AUDIO BITRATE: 			${AUDIOADJ} kbps"
-fi )
+fi
+cat <<EOF
 VIDEO DURATION:			$DURATION s
 VIDEO CODEC:			$LIBCV
 SELECTED RESOLUTION:		$HRES x $VRES
 VIDEO FRAMERATE:		$FRATE fps
-
 CURRENT TOTAL BITRATE:		$CRAT kbps
 MAX. PERMISSIBLE BITRATE:	$NOMINAL kbps
 SELECTED VIDEO BITRATE:		$BITRATE kbps
-$( if [[ -n $EXTRARG ]]
+EOF
+if [[ -n $EXTRARG ]]
 then
     echo "FFMPEG ARGUMENTS:		$EXTRARG"
-fi )
-=========================================================================================================
+fi
+cat <<EOF
+===================================================================================================
 EOF
 tput sgr 0
 
 Proceed $LIBCV
-
-OutfileSize "${OUTFILEFIXED}.webm"
