@@ -11,9 +11,9 @@ Just chuck it into a dedicated script folder (ideally in `$PATH`) or have it in 
 The absolute minimum command required to transcode media into 4chan compatible webms is:
 
 ```bash
-$ ./4webm.sh -i input.mp4
+$ ./4webm.sh -i input.mp4 OR $ ./4webm.sh -i ~/path/to/your/files
 ```
- The output file name will always be `inputfilename_DATE_TIME.webm`. If a different max. file size, duration and audio compatibility is desired, specify a board and enable the audio flag:
+Unless the script is batch converting or the `-o` flag is set, the output file name will default to `inputfilename_DATE_TIME.webm`. If a different max. file size, duration and audio compatibility is desired, specify a board and enable the audio flag:
 
 ```bash
 $ ./4webm.sh -i input.mp4 -b wsg -a
@@ -22,6 +22,12 @@ A "complete" example:
 
 ```bash
 $ ./4webm.sh -i input.mp4 -b wsg -a 128 -m 10 -q best -v 0 -s 00:00:10.500 -e 00:01:19.690 -x "-vf eq=saturation=1.1,scale=-1:720 -aspect 16:9"
+```
+
+Or running in "batch mode":
+
+```bash
+$ ./4webm.sh -i /path/to/files -b wsg -a -f
 ```
 
 Flags:
@@ -36,6 +42,8 @@ Flags:
 
 * (not shown) `-l` changes the video and audio codices to *libvpx* (VP8) and *libvorbis*. This also means that `-q` and `-v` are no longer functional. This should only be used for compatibility (**legacy**) purposes.
 
+* (not shown) `-f` skips user confirmation and **forces** the script to proceed. Can be used in conjunction with `-i /path/to/files` to convert a batch of files
+
 The help screen explains all flags and can be accessed via `$ ./4webm.sh -h`
 
 ## Default behaviour
@@ -45,5 +53,7 @@ The script determines a suitable total bitrate for a two pass encoding and addit
 The script also suggests a value for the margin setting `-m`, should the output be above/significantly below board limits. Alternatively, if audio was enabled, a lower audio bitrate is determined which reduces the file size (this option only re-encodes audio and is thus significantly faster than re-encoding the video again). 
 
 There are currently no flags to optimise for bandwidth or storage space, this can be worked around by setting a high margin `-m` or setting the target board to /bant/: `-b bant` (2MiB limit).
+
+When running in batch mode, any flags that control media parameters will affect all files equally.
 
 [^1]: Currently, a positive margin value reduces the total bitrate, while a negative value increases it. This should probably be changed, but for now, it'll work.
