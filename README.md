@@ -11,7 +11,9 @@ Just chuck it into a dedicated script folder (ideally in `$PATH`) or have it in 
 The absolute minimum command required to transcode media into 4chan compatible webms is:
 
 ```bash
-$ ./4webm.sh -i input.mp4 OR $ ./4webm.sh -i ~/path/to/your/files
+$ ./4webm.sh -i input.mp4
+OR
+$ ./4webm.sh -i ~/path/to/your/files
 ```
 Unless the script is batch converting or the `-o` flag is set, the output file name will default to `inputfilename_DATE_TIME.webm`. If a different max. file size, duration and audio compatibility is desired, specify a board and enable the audio flag:
 

@@ -12,20 +12,15 @@ set -o errexit
 # DEFAULTS #
 ############
 
-
-Reset() {
-ARAT="0"
-MARGIN="0"
-}
-Reset
-AUDIOPTS="-an"
 AUDIOADJ="0"
+AUDIOPTS="-an"
 AUDIO="false"
 BOARD="g"
 LIBCV="libvpx-vp9"
 LIBCA="libopus"
 QUALITY="good"
 EXTRARG=""
+USERMARGIN="0"
 LOWLIMIT="10"
 OVERHEAD="3"
 FORCE="false"
@@ -33,12 +28,12 @@ FORCE="false"
 ExitScript() {
     if [[ $FORCE != "true" ]]
     then
-       exit
+	exit
     fi
 }
 
 Help() {
-cat <<EOF
+    cat <<EOF
 
 Simple 4chan webm script.
 
@@ -102,7 +97,7 @@ EOF
 }
 
 BitrateCalc() {
-NOMINAL=$( echo "scale=2; ($1 * 2^20 * 0.008 / $DURATION)" | bc )
+    NOMINAL=$( echo "scale=2; ($1 * 2^20 * 0.008 / $DURATION)" | bc )
 }
 
 Proceed() {
@@ -134,44 +129,45 @@ Proceed() {
 
 OutfileAnalysis() {
 
-if [[ $( echo "$OUTSIZE > $FILESIZE" | bc -l ) -eq 1 ]]
-then
-    DELTA=$( echo "$OUTSIZE - $FILESIZE" | bc  )
-    BitrateCalc $DELTA
-    echo -e "$( tput setaf 1 )\nLIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
-    MARGIN=$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )
-    
-    if [[ $AUDIO == true ]]
+    if [[ $( echo "$OUTSIZE > $FILESIZE" | bc -l ) -eq 1 ]]
     then
-        AUDIOADJ=$( echo "scale=2; $AUDIOADJ - $NOMINAL - 1" | bc )
-        AUDIOPTS="-c:a $LIBCA -b:a ${AUDIOADJ}K"
-	if [[ $( echo "$AUDIOADJ > 32" | bc -l ) -eq 1 ]]
+	DELTA=$( echo "$OUTSIZE - $FILESIZE" | bc  )
+	BitrateCalc $DELTA
+	echo -e "$( tput setaf 1 )\nLIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
+	MARGIN=$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )
+	
+	if [[ $AUDIO == true ]]
 	then
-            echo "Re-encode audio at $AUDIOADJ kbps to reduce the file size?"
-            Proceed fix
-            OutfileSize "${OUTFILEFIXED}_reencode.webm"
+            ARATE=$( echo "scale=2; $ARATE - $NOMINAL - 1" | bc )
+            AUDIOPTS="-c:a $LIBCA -b:a ${ARATE}K"
+	    if [[ $( echo "$ARATE > 32" | bc -l ) -eq 1 ]]
+	    then
+		echo "Re-encode audio at $ARATE kbps to reduce the file size?"
+		Proceed fix
+		OutfileSize $( echo "${OUTFILEFIXED}_reencode.webm" | sed 's/^.*\///' )
+	    else
+		echo "Audio re-encode not possible as the resulting audio bitrate would drop below the threshold of 32 kbps. Rerun with \"-m $MARGIN\"."
+		ExitScript
+	    fi
 	else
-	    echo "Audio re-encode not possible as the resulting audio bitrate would drop below the threshold of 32 kbps. Rerun with \"-m $MARGIN\"."
+	    echo "Rerunning with \"-m $MARGIN \" may bring the file size back within limits."
 	    ExitScript
 	fi
     else
-	echo "Rerunning with \"-m $MARGIN \" may bring the file size back within limits."
-	ExitScript
+
+	echo -e "\nThe output file size is: $( tput setaf 2 )$OUTSIZE MiB$( tput sgr 0 )"
+
+	DELTA=$( echo "$FILESIZE - $OUTSIZE" | bc  )
+	BitrateCalc $DELTA
+	MARGIN=$( echo "scale=2; $MARGIN - $NOMINAL + 1" | bc)
+
+	if [[ $( echo "$NOMINAL < $LOWLIMIT" | bc -l ) -eq 1 ]] || [[ $( echo "($BITRATE + $NOMINAL) > $CRAT" | bc -l ) -eq 1 ]]
+	then
+	    ExitScript
+	else
+	    echo "It may be possible to increase quality while staying within limits by setting \"-m $MARGIN \"."
+	fi
     fi
-fi
-
-echo -e "\nThe output file size is: $( tput setaf 2 )$OUTSIZE MiB$( tput sgr 0 )"
-
-DELTA=$( echo "$FILESIZE - $OUTSIZE" | bc  )
-BitrateCalc $DELTA
-MARGIN=$( echo "scale=2; $MARGIN - $NOMINAL + 1" | bc)
-
-if [[ $( echo "$NOMINAL < $LOWLIMIT" | bc -l ) -eq 1 ]] || [[ $( echo "($BITRATE + $NOMINAL) > $CRAT" | bc -l ) -eq 1 ]]
-then
-    ExitScript
-else
-    echo "It may be possible to increase quality while staying within limits by setting \"-m $MARGIN \"."
-fi
 }
 
 OutfileSize() {
@@ -185,17 +181,17 @@ OutfileSize() {
 #####################
 
 Encode() {
-echo "Pass 1/2:"
-ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 1 -quality good -speed 4 $EXTRARG -an -f rawvideo -y /dev/null
-echo "Pass 2/2:"
-ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
-rm ffmpeg2pass-0.log
-OutfileSize $( echo "${OUTFILEFIXED}.webm" | sed 's/^.*\///' )
+    echo "Pass 1/2:"
+    ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 1 -quality good -speed 4 $EXTRARG -an -f rawvideo -y /dev/null
+    echo "Pass 2/2:"
+    ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
+    rm ffmpeg2pass-0.log
+    OutfileSize $( echo "${OUTFILEFIXED}.webm" | sed 's/^.*\///' )
 }
 
 Reencode() {
-echo "Pass 1/1:"
-ffmpeg -hide_banner -loglevel error -stats -i "${OUTFILE}.webm" -i "$INFILE" -c:v copy $AUDIOPTS -map 0:v:0 -map 1:a:0 -shortest -map_metadata -1 -y "${OUTFILE}_reencode.webm"
+    echo "Pass 1/1:"
+    ffmpeg -hide_banner -loglevel error -stats -i "${OUTFILE}.webm" -i "$INFILE" -c:v copy $AUDIOPTS -map 0:v:0 -map 1:a:0 -shortest -map_metadata -1 -y "${OUTFILE}_reencode.webm"
 }
 
 while getopts "ab:e:fi:lm:o:q:s:v:x:h" OPTS; do
@@ -215,7 +211,7 @@ while getopts "ab:e:fi:lm:o:q:s:v:x:h" OPTS; do
 	i) IN="$OPTARG";;
 	l) LIBCV="libvpx"
 	   LIBCA="libvorbis";;
-	m) MARGIN="$OPTARG";;
+	m) USERMARGIN="$OPTARG";;
 	o) OUTFILE="$OPTARG";;
 	q) QUALITY="$OPTARG";;
 	s) START="$OPTARG";;
@@ -224,7 +220,7 @@ while getopts "ab:e:fi:lm:o:q:s:v:x:h" OPTS; do
 	h) Help
 	   exit 1;;
 	?) Help
-	   exit 1;;
+	exit 1;;
 	:) Help
 	   exit 1;;
     esac
@@ -232,11 +228,11 @@ done
 
 
 OutfileName() {
-if [[ -z $OUTFILE ]]
-then
-    OUTFILE="$( echo "$INFILE" | sed 's/\(\.\w\{3,4\}\)$//' )""_$( date +%F_%T )"
-fi
-OUTFILEFIXED=$( echo "$OUTFILE" | sed 's/\[/\\\[/g' | sed 's/\]/\\\]/g' )
+    if [[ -z $OUTFILE ]]
+    then
+	OUTFILE="$( echo "$INFILE" | sed 's/\(\.\w\{3,4\}\)$//' )""_$( date +%F_%T )"
+    fi
+    OUTFILEFIXED=$( echo "$OUTFILE" | sed 's/\[/\\\[/g' | sed 's/\]/\\\]/g' )
 }
 
 ##########################
@@ -244,34 +240,30 @@ OUTFILEFIXED=$( echo "$OUTFILE" | sed 's/\[/\\\[/g' | sed 's/\]/\\\]/g' )
 ##########################
 
 DetermineBoardLimit() {
-if [[ $BOARD == wsg ]]
-then
-    FILESIZE="6"
-    MAXDUR="300"
-elif [[ $BOARD == b ]] || [[ $BOARD == bant ]]
-then
-    FILESIZE="2"
-    MAXDUR="120"
-else
-    FILESIZE="4"
-    MAXDUR="120"
-fi
+    if [[ $BOARD == wsg ]]
+    then
+	FILESIZE="6"
+	MAXDUR="300"
+    elif [[ $BOARD == b ]] || [[ $BOARD == bant ]]
+    then
+	FILESIZE="2"
+	MAXDUR="120"
+    else
+	FILESIZE="4"
+	MAXDUR="120"
+    fi
 }
 
 SetAudio() {
-if [[ $AUDIO == true ]] && [[ $BOARD == wsg || $BOARD == gif || $BOARD == wsr ]]
-then
-    AUDIOPTS="-c:a $LIBCA -b:a ${AUDIOADJ}K"
-    ARAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*fltp, //p' | sed 's/\( kb\/s\ (default)\)$//' )
-    if [[ -z $ARAT ]]
+    ARATE=$AUDIOADJ
+    if [[ $AUDIO == true ]] && [[ $BOARD == wsg || $BOARD == gif || $BOARD == wsr ]]
     then
-    	ARAT="128"
+	AUDIOPTS="-c:a $LIBCA -b:a ${ARATE}K"
+    elif [[ $AUDIO == true ]] && [[ $BOARD != wsg || $BOARD != gif || $BOARD != wsr ]]
+    then
+	echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected board does not support audio. Please deselect the audio flag \"-a\" or choose a board with audio compatibility."
+	ExitScript
     fi
-elif [[ $AUDIO == true ]] && [[ $BOARD != wsg || $BOARD != gif || $BOARD != wsr ]]
-then
-    echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected board does not support audio. Please deselect the audio flag \"-a\" or choose a board with audio compatibility."
-    ExitScript
-fi
 }
 
 ##################
@@ -279,45 +271,54 @@ fi
 ##################
 
 DurationCheck() {
-if [[ -n $START ]] && [[ -n $END ]]
-then
-    S=$( echo "$START" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
-    E=$( echo "$END" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
-    DURATION=$( echo "$E - $S" | bc )
-    STARG="-ss $START"
-    ETARG="-to $END"
-elif [[ -n $START ]] && [[ -z $END ]]
-then
-    S=$( echo "$START" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
-    E=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*Duration: //p' | sed -n 's/\(,.*\)$//p' | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
-    DURATION=$( echo "$E - $S" | bc )
-    STARG="-ss $START"
-    ETARG=""
-elif [[ -z $START ]] && [[ -n $END ]]
-then
-    S="0"
-    E=$( echo "$END" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
-    DURATION=$( echo "$E - $S" | bc )
-    STARG=""
-    ETARG="-to $END"
-else
-    DURATION=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*Duration: //p' | sed -n 's/\(,.*\)$//p' | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
-fi
-
-if [[ $( echo "$DURATION > $MAXDUR" | bc -l ) -eq 1 ]]
-then
-    echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The duration of the input medium exceeds the max. permissible duration ($MAXDUR s) for your selected board."
-    echo "Specify a different board or cut the video file."
-    if [[ $FORCE != "true" ]]
+    ORIGDURATION=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*Duration: //p' | sed -n 's/\(,.*\)$//p' | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
+    if [[ -n $START ]] && [[ -n $END ]]
     then
-	exit
+	S=$( echo "$START" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
+	E=$( echo "$END" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
+	DURATION=$( echo "$E - $S" | bc )
+	STARG="-ss $START"
+	ETARG="-to $END"
+    elif [[ -n $START ]] && [[ -z $END ]]
+    then
+	S=$( echo "$START" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
+	E=$ORIGDURATION
+	DURATION=$( echo "$E - $S" | bc )
+	STARG="-ss $START"
+	ETARG=""
+    elif [[ -z $START ]] && [[ -n $END ]]
+    then
+	S="0"
+	E=$( echo "$END" | awk -F : '{print ($1*3600) + ($2*60) + $3}' )
+	DURATION=$( echo "$E - $S" | bc )
+	STARG=""
+	ETARG="-to $END"
     else
-	echo -e "\n-f flag set. Encoding from beginning to max. permissible length"
-	DURATION=$MAXDUR
-	START="-ss 00:00:00.000"
-	ETARG="-t $MAXDUR"
+	DURATION=$ORIGDURATION
     fi
-fi
+
+    if [[ $( echo "$DURATION > $ORIGDURATION" | bc -l ) -eq 1 ]]
+    then
+	echo "$( tput setaf 1 )End argument error: $( tput sgr 0 )The end-point is beyond the duration of the input file."
+	exit
+    elif [[ $( echo "$DURATION < 0" | bc -l ) -eq 1 ]]
+    then
+	"$( tput setaf 1 )Start/end argument error: $( tput sgr 0 )The start-point is beyond the end time of the input file."
+	exit
+    elif [[ $( echo "$DURATION > $MAXDUR" | bc -l ) -eq 1 ]]
+    then
+	echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The duration of the input medium exceeds the max. permissible duration ($MAXDUR s) for your selected board."
+	echo "Specify a different board or cut the video file."
+	if [[ $FORCE != "true" ]]
+	then
+	    exit
+	else
+	    echo -e "\n-f flag set. Encoding from beginning to max. permissible length"
+	    DURATION=$MAXDUR
+	    START="-ss 00:00:00.000"
+	    ETARG="-t $MAXDUR"
+	fi
+    fi
 }
 
 #######################
@@ -325,16 +326,21 @@ fi
 #######################
 
 SetBitrate() {
-CRAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*bitrate: //p' | sed 's/\( kb\/s\)$//' )
-BitrateCalc $FILESIZE
-NRATE=$( echo "$NOMINAL - $AUDIOADJ" | bc )
+    MARGIN=$USERMARGIN
+    CRAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*bitrate: //p' | sed 's/\( kb\/s\)$//' )
+    if [[ -z $CRAT ]]
+    then
+	CRAT="10000"
+    fi
+    BitrateCalc $FILESIZE
+    NRATE=$( echo "$NOMINAL - $ARATE" | bc )
 
-if [[ $( echo "$NOMINAL < $CRAT" | bc -l ) -eq 1 ]]
-then
-    BITRATE=$( echo "$NRATE - $MARGIN - $OVERHEAD" | bc )
-else
-    BITRATE=$( echo "$CRAT - $MARGIN" | bc )
-fi
+    if [[ $( echo "$NOMINAL < $CRAT" | bc -l ) -eq 1 ]]
+    then
+	BITRATE=$( echo "$NRATE - $MARGIN - $OVERHEAD" | bc )
+    else
+	BITRATE=$( echo "$CRAT - $MARGIN" | bc )
+    fi
 }
 
 ####################
@@ -342,62 +348,62 @@ fi
 ####################
 
 ResolutionCheck() {
-RES=$( ffprobe "$INFILE" 2>&1 | grep -o -E [0-9]\{2,4\}x[0-9]\{2,4\} )
-HRES=$( echo "$RES" | awk -F x '{print $1}' )
-VRES=$( echo "$RES" | awk -F x '{print $2}' )
+    RES=$( ffprobe "$INFILE" 2>&1 | grep -o -E [0-9]\{2,4\}x[0-9]\{2,4\} )
+    HRES=$( echo "$RES" | awk -F x '{print $1}' )
+    VRES=$( echo "$RES" | awk -F x '{print $2}' )
 
-FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? tbr" | sed 's/\( tbr.*\)$//' )
-if [[ -z $FRATE ]]
-then
-    FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? fps" | sed 's/\( fps.*\)$//' )
-fi
-
-if [[ -n $EXTRARG ]]
-then
-    SELHRES=$( echo $EXTRARG | grep -o -E \\-vf.*scale=-?[0-9]+:-?[0-9]+ | sed 's/-vf.*scale=//' | awk -F : '{print ($1)}' )
-    SELVRES=$( echo $EXTRARG | grep -o -E \\-vf.*scale=-?[0-9]+:-?[0-9]+ | sed 's/-vf.*scale=//' | awk -F : '{print ($2)}' )
-
-    if [[ -n $SELHRES ]] && [[ $( echo "$SELHRES > 2048" | bc -l ) -eq 1 || $(echo "$SELVRES > 2048" | bc -l ) -eq 1 ]]
+    FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? tbr" | sed 's/\( tbr.*\)$//' )
+    if [[ -z $FRATE ]]
     then
-        echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected horizontal/vertical video resolution exceeds 2048p."
-        exit
+	FRATE=$( ffprobe "$INFILE" 2>&1 | grep -o -E "[0-9]+(.[0-9]+)? fps" | sed 's/\( fps.*\)$//' )
     fi
 
-    HCROP=$( echo $EXTRARG | grep -o -E \\-vf.*crop=[0-9]+:[0-9]+ | sed 's/-vf.*crop=//' | awk -F : '{print ($1)}' )
-    VCROP=$( echo $EXTRARG | grep -o -E \\-vf.*crop=[0-9]+:[0-9]+ | sed 's/-vf.*crop=//' | awk -F : '{print ($2)}' )
-
-    if  [[ -n $HCROP ]] && [[ $( echo "$HCROP > 2048" | bc -l ) -eq 1 || $(echo "$VCROP > 2048" | bc -l ) -eq 1 ]]
+    if [[ -n $EXTRARG ]]
     then
-        echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The cropped horizontal/vertical video resolution exceeds 2048p."
-        exit
+	SELHRES=$( echo $EXTRARG | grep -o -E \\-vf.*scale=-?[0-9]+:-?[0-9]+ | sed 's/-vf.*scale=//' | awk -F : '{print ($1)}' )
+	SELVRES=$( echo $EXTRARG | grep -o -E \\-vf.*scale=-?[0-9]+:-?[0-9]+ | sed 's/-vf.*scale=//' | awk -F : '{print ($2)}' )
+
+	if [[ -n $SELHRES ]] && [[ $( echo "$SELHRES > 2048" | bc -l ) -eq 1 || $(echo "$SELVRES > 2048" | bc -l ) -eq 1 ]]
+	then
+            echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected horizontal/vertical video resolution exceeds 2048p."
+            exit
+	fi
+
+	HCROP=$( echo $EXTRARG | grep -o -E \\-vf.*crop=[0-9]+:[0-9]+ | sed 's/-vf.*crop=//' | awk -F : '{print ($1)}' )
+	VCROP=$( echo $EXTRARG | grep -o -E \\-vf.*crop=[0-9]+:[0-9]+ | sed 's/-vf.*crop=//' | awk -F : '{print ($2)}' )
+
+	if  [[ -n $HCROP ]] && [[ $( echo "$HCROP > 2048" | bc -l ) -eq 1 || $(echo "$VCROP > 2048" | bc -l ) -eq 1 ]]
+	then
+            echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The cropped horizontal/vertical video resolution exceeds 2048p."
+            exit
+	fi
     fi
-fi
 
-if [[ $( echo "$HRES > 2048" | bc -l ) -eq 1 || $( echo "$VRES > 2048" | bc -l ) -eq 1 ]]
-then
-    echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The horizontal/vertical video resolution exceeds 2048p. Please scale/crop the video"
-    exit
-fi
+    if [[ $( echo "$HRES > 2048" | bc -l ) -eq 1 || $( echo "$VRES > 2048" | bc -l ) -eq 1 ]]
+    then
+	echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The horizontal/vertical video resolution exceeds 2048p. Please scale/crop the video"
+	exit
+    fi
 
-if [[ -n $SELHRES ]]
-then
-    HRES="$SELHRES"
-    VRES="$SELVRES"
-elif [[ -n $HCROP ]]
-then
-    HRES="$HCROP"
-    VRES="$VCROP"
-fi
+    if [[ -n $SELHRES ]]
+    then
+	HRES="$SELHRES"
+	VRES="$SELVRES"
+    elif [[ -n $HCROP ]]
+    then
+	HRES="$HCROP"
+	VRES="$VCROP"
+    fi
 }
 
 SetSpeed() {
-if [[ -z $SPEED && $( echo "$VRES >= 720" | bc -l ) -eq 1 ]]
-then
-    SPEED="2"
-elif [[ -z $SPEED ]]
-then
-    SPEED="1"
-fi
+    if [[ -z $SPEED && $( echo "$VRES >= 720" | bc -l ) -eq 1 ]]
+    then
+	SPEED="2"
+    elif [[ -z $SPEED ]]
+    then
+	SPEED="1"
+    fi
 }
 
 ################
@@ -405,20 +411,20 @@ fi
 ################
 
 MediaInfo() {
-tput setaf 6
-cat << EOF
+    tput setaf 6
+    cat << EOF
 ===================================================================================================
 INPUT FILE:			$INFILE
 OUTPUT FILE:			${OUTFILE}.webm
 SELECTED BOARD:			/$BOARD/
 AUDIO:				$AUDIO
 EOF
-if [[ $AUDIO == true ]]
-then
-    echo "AUDIO CODEC:			$LIBCA"
-    echo "AUDIO BITRATE: 			${AUDIOADJ} kbps"
-fi
-cat <<EOF
+    if [[ $AUDIO == true ]]
+    then
+	echo "AUDIO CODEC:			$LIBCA"
+	echo "AUDIO BITRATE: 			${ARATE} kbps"
+    fi
+    cat <<EOF
 VIDEO DURATION:			$DURATION s
 VIDEO CODEC:			$LIBCV
 SELECTED RESOLUTION:		$HRES x $VRES
@@ -427,14 +433,14 @@ CURRENT TOTAL BITRATE:		$CRAT kbps
 MAX. PERMISSIBLE BITRATE:	$NOMINAL kbps
 SELECTED VIDEO BITRATE:		$BITRATE kbps
 EOF
-if [[ -n $EXTRARG ]]
-then
-    echo "FFMPEG ARGUMENTS:		$EXTRARG"
-fi
-cat <<EOF
+    if [[ -n $EXTRARG ]]
+    then
+	echo "FFMPEG ARGUMENTS:		$EXTRARG"
+    fi
+    cat <<EOF
 ===================================================================================================
 EOF
-tput sgr 0
+    tput sgr 0
 }
 
 #############
@@ -442,15 +448,15 @@ tput sgr 0
 #############
 
 Main() {
-	OutfileName
-	DetermineBoardLimit
-	SetAudio
-	DurationCheck
-	SetBitrate
-	ResolutionCheck
-	SetSpeed
-	MediaInfo
-	Proceed
+    OutfileName
+    DetermineBoardLimit
+    SetAudio
+    DurationCheck
+    SetBitrate
+    ResolutionCheck
+    SetSpeed
+    MediaInfo
+    Proceed
 }    
 
 if [[ -d $IN ]]
@@ -460,13 +466,13 @@ then
     do
 	if [[ $( echo $ENTRY | grep -E "\.(mp4|mkv|webm|mov|3gp|avi|flv|f4v|mpeg|ogg|wmv|yuv|gif)" ) ]]
 	then
-	INFILE="$ENTRY"
-	Main
+	    INFILE="$ENTRY"
+	    Main
 	else
 	    echo "Skipping $ENTRY"
 	fi
+	SPEED=""
 	OUTFILE=""
-	Reset
     done
 elif [[ -f $IN ]]
 then
