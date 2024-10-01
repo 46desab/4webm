@@ -38,60 +38,60 @@ Help() {
 Simple 4chan webm script.
 
 Arguments:
-	-i INPUT FILE   $( tput setaf 1 )(REQUIRED!)$( tput sgr 0 ) Specifies the input file to be used, output file name will be "inputfilename_DATE_TIME.webm".
-	   INPUT PATH   Alternatively, a path can be specified. Directory should ideally only include convertible media.
-	   	 	Flags will affect all files.
-				EXAMPLE:	-i inputfilename.mp4, -i ./path/to/media
+-i INPUT FILE   $( tput setaf 1 )(REQUIRED!)$( tput sgr 0 ) Specifies the input file to be used, output file name will be "inputfilename_DATE_TIME.webm".
+   INPUT PATH   Alternatively, a path can be specified. Directory should ideally only include convertible media.
+   	 	Flags will affect all files.
+		EXAMPLE:	-i inputfilename.mp4, -i ./path/to/media
 
-	-a AUDIO	Toggles audio and allows for a bitrate specification. Can only be used in conjunction with boards: /wsg/,/wsr/,/gif/.
-				DEFAULT:	OFF (no audio)
-				EXAMPLE:	-a, -a 128
+-a AUDIO	Toggles audio and allows for a bitrate specification. Can only be used in conjunction with boards: /wsg/,/wsr/,/gif/.
+		DEFAULT:	OFF (no audio)
+		EXAMPLE:	-a, -a 128
 
-	-b BOARD	Selects the intended board. Max. file size, duration and audio will be determined by this.
-				DEFAULT:	Limit of 4096KiB and no audio.
-				EXAMPLE:	-b wsg
+-b BOARD	Selects the intended board. Max. file size, duration and audio will be determined by this.
+		DEFAULT:	Limit of 4096KiB and no audio.
+		EXAMPLE:	-b wsg
 
-	-f FORCE	Skips user confirmation and immediately proceeds with the encoding. Can be used as a batch mode in conjunction with -i
-	   		        DEFAULT:	off
-				EXAMPLE:	-f
+-f FORCE	Skips user confirmation and immediately proceeds with the encoding. Can be used as a batch mode in conjunction with -i
+   		        DEFAULT:	off
+		EXAMPLE:	-f
 
-	-l LEGACY	Changes the codices to VP8 and VORBIS. Only enable for compatibility purposes. Audio is still controlled
-			via "-a".
-				DEFAULT:        OFF (VP9 + OPUS)
-				EXAMPLE:        -l
+-l LEGACY	Changes the codices to VP8 and VORBIS. Only enable for compatibility purposes. Audio is still controlled
+	via "-a".
+		DEFAULT:        OFF (VP9 + OPUS)
+		EXAMPLE:        -l
 
-	-m MARGIN	Adjusts the calculated max. permissible bitrate by X kbps. Can be used to increase quality or to decrease file sizes.
-				DEFAULT:        0
-				EXAMPLE:        -m 3, -m -14.08
+-m MARGIN	Adjusts the calculated max. permissible bitrate by X kbps. Can be used to increase quality or to decrease file sizes.
+		DEFAULT:        0
+		EXAMPLE:        -m 3, -m -14.08
 
-	-o OUTPUT FILE Specifies the output file name. If not set, output file name will default to "input_DATE_TIME.webm". Unicode characters are supported,
-	   	       but the file name needs to be delimited by " ". Does not work if a directory is specified as the input.
-	   	       		DEFAULT:       (default name)
-				EXAMPLE:       -o output_file_name
+-o OUTPUT FILE Specifies the output file name. If not set, output file name will default to "input_DATE_TIME.webm". Unicode characters are supported,
+   	       but the file name needs to be delimited by " ". Does not work if a directory is specified as the input.
+   	       		DEFAULT:       (default name)
+		EXAMPLE:       -o output_file_name
 
-	-q QUALITY	Specifies the -quality setting of libvpx-vp9. Better quality means higher compression but also longer
-			encoding times.
-				DEFAULT:	good
-				EXAMPLE:	-q best
+-q QUALITY	Specifies the -quality setting of libvpx-vp9. Better quality means higher compression but also longer
+	encoding times.
+		DEFAULT:	good
+		EXAMPLE:	-q best
 
-	-s/-e START/END	Specifies start/end times. Similar to ffmpeg's "-ss" and "-to", requires same syntax. Used to determine
-			duration and bitrates.
-				DEFAULT: (full input media length)
-				EXAMPLE:	-s 00:00:03.210
-						-e 00:00:04.169
-						-s 00:01:01.200 -e 00:01:06.199
+-s/-e START/END	Specifies start/end times. Similar to ffmpeg's "-ss" and "-to", requires same syntax. Used to determine
+	duration and bitrates.
+		DEFAULT: (full input media length)
+		EXAMPLE:	-s 00:00:03.210
+				-e 00:00:04.169
+				-s 00:01:01.200 -e 00:01:06.199
 
-	-v SPEED	Specifies the -speed setting of libvpx-vp9. Lower speed means higher compression but also longer
-			encoding times.
-				DEFAULT:	<720p --> 1, >=720p --> 2
-				EXAMPLE:	-v 2
+-v SPEED	Specifies the -speed setting of libvpx-vp9. Lower speed means higher compression but also longer
+	encoding times.
+		DEFAULT:	<720p --> 1, >=720p --> 2
+		EXAMPLE:	-v 2
 
-	-x EXTRA	Specifies additional ffmpeg parameters. Needs to be delimited by " ".  Can be used to scale, crop, filter etc.
-			(Pass filter arguments only using -vf). Please refer to the ffmpeg manual for more information.
-				DEFAULT:	No additional options
-				EXAMPLE:	-x "-vf scale=-1:720 -aspect 16:9"
+-x EXTRA	Specifies additional ffmpeg parameters. Needs to be delimited by " ".  Can be used to scale, crop, filter etc.
+	(Pass filter arguments only using -vf). Please refer to the ffmpeg manual for more information.
+		DEFAULT:	No additional options
+		EXAMPLE:	-x "-vf scale=-1:720 -aspect 16:9"
 
-	FULL EXAMPLE: $ bash 4webm.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1,crop=200:100:100:0"
+FULL EXAMPLE: $ bash 4webm.sh -i input.mp4 -b wsg -a 64 -m 1 -q best -v 0 -x "-vf eq=saturation=1.1,crop=200:100:100:0"
 
 EOF
 }
@@ -108,7 +108,7 @@ Proceed() {
     else
 	AFFIRM="y"
     fi
-    
+
     if [[ $AFFIRM == y ]] && [[ $1 == fix ]]
     then
 	echo -e "\nRe-encoding audio"
@@ -134,24 +134,25 @@ OutfileAnalysis() {
 	DELTA=$( echo "$OUTSIZE - $FILESIZE" | bc  )
 	BitrateCalc $DELTA
 	echo -e "$( tput setaf 1 )\nLIMIT ERROR: $( tput sgr 0 )The output file size is: $OUTSIZE MiB, which is larger than the max. permissible filesize of $FILESIZE MiB"
-	MARGIN=$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )
-	
+	NEWMARGIN=$( echo "scale=2; $MARGIN + $NOMINAL + 1" | bc )
+	SetBitrate $NEWMARGIN
+
 	if [[ $AUDIO == true ]]
 	then
-            ARATE=$( echo "scale=2; $ARATE - $NOMINAL - 1" | bc )
-            AUDIOPTS="-c:a $LIBCA -b:a ${ARATE}K"
-	    if [[ $( echo "$ARATE > 32" | bc -l ) -eq 1 ]]
+	    NEWARATE=$( echo "scale=2; $ARATE - $NOMINAL - 1" | bc )
+	    if [[ $( echo "$NEWARATE > 32" | bc -l ) -eq 1 ]]
 	    then
+		AUDIOPTS="-c:a $LIBCA -b:a ${NEWARATE}K"
 		echo "Re-encode audio at $ARATE kbps to reduce the file size?"
 		Proceed fix
 		OutfileSize $( echo "${OUTFILEFIXED}_reencode.webm" | sed 's/^.*\///' )
 	    else
-		echo "Audio re-encode not possible as the resulting audio bitrate would drop below the threshold of 32 kbps. Rerun with \"-m $MARGIN\"."
-		ExitScript
+		echo "Audio re-encode not possible as the resulting audio bitrate would drop below the threshold of 32 kbps. Rerun with \"-m $NEWMARGIN\"."
+		Proceed
 	    fi
 	else
-	    echo "Rerunning with \"-m $MARGIN \" may bring the file size back within limits."
-	    ExitScript
+	    echo "Rerunning with \"-m $NEWMARGIN \" may bring the file size back within limits."
+	    Proceed
 	fi
     else
 
@@ -159,13 +160,13 @@ OutfileAnalysis() {
 
 	DELTA=$( echo "$FILESIZE - $OUTSIZE" | bc  )
 	BitrateCalc $DELTA
-	MARGIN=$( echo "scale=2; $MARGIN - $NOMINAL + 1" | bc)
+	NEWMARGIN=$( echo "scale=2; $MARGIN - $NOMINAL + 1" | bc)
 
 	if [[ $( echo "$NOMINAL < $LOWLIMIT" | bc -l ) -eq 1 ]] || [[ $( echo "($BITRATE + $NOMINAL) > $CRAT" | bc -l ) -eq 1 ]]
 	then
 	    ExitScript
 	else
-	    echo "It may be possible to increase quality while staying within limits by setting \"-m $MARGIN \"."
+	    echo "It may be possible to increase quality while staying within limits by setting \"-m $NEWMARGIN \"."
 	fi
     fi
 }
@@ -186,7 +187,7 @@ Encode() {
     echo "Pass 2/2:"
     ffmpeg -hide_banner -loglevel error -stats -i "$INFILE" $STARG $ETARG -c:v $LIBCV -b:v "${BITRATE}K" -pass 2 -quality $QUALITY -speed $SPEED $EXTRARG $AUDIOPTS -row-mt 1 -map_metadata -1 -y "${OUTFILE}.webm"
     rm ffmpeg2pass-0.log
-    OutfileSize $( echo "${OUTFILEFIXED}.webm" | sed 's/^.*\///' )
+    OutfileSize "$( echo "${OUTFILEFIXED}.webm" | sed 's/^.*\///' )"
 }
 
 Reencode() {
@@ -295,6 +296,8 @@ DurationCheck() {
 	ETARG="-to $END"
     else
 	DURATION=$ORIGDURATION
+	STARG=""
+	ETARG=""
     fi
 
     if [[ $( echo "$DURATION > $ORIGDURATION" | bc -l ) -eq 1 ]]
@@ -315,7 +318,7 @@ DurationCheck() {
 	else
 	    echo -e "\n-f flag set. Encoding from beginning to max. permissible length"
 	    DURATION=$MAXDUR
-	    START="-ss 00:00:00.000"
+	    START=""
 	    ETARG="-t $MAXDUR"
 	fi
     fi
@@ -326,7 +329,7 @@ DurationCheck() {
 #######################
 
 SetBitrate() {
-    MARGIN=$USERMARGIN
+    MARGIN=$1
     CRAT=$( ffprobe "$INFILE" 2>&1 | sed -n 's/^.*bitrate: //p' | sed 's/\( kb\/s\)$//' )
     if [[ -z $CRAT ]]
     then
@@ -365,8 +368,8 @@ ResolutionCheck() {
 
 	if [[ -n $SELHRES ]] && [[ $( echo "$SELHRES > 2048" | bc -l ) -eq 1 || $(echo "$SELVRES > 2048" | bc -l ) -eq 1 ]]
 	then
-            echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected horizontal/vertical video resolution exceeds 2048p."
-            exit
+	    echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The selected horizontal/vertical video resolution exceeds 2048p."
+	    exit
 	fi
 
 	HCROP=$( echo $EXTRARG | grep -o -E \\-vf.*crop=[0-9]+:[0-9]+ | sed 's/-vf.*crop=//' | awk -F : '{print ($1)}' )
@@ -374,8 +377,8 @@ ResolutionCheck() {
 
 	if  [[ -n $HCROP ]] && [[ $( echo "$HCROP > 2048" | bc -l ) -eq 1 || $(echo "$VCROP > 2048" | bc -l ) -eq 1 ]]
 	then
-            echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The cropped horizontal/vertical video resolution exceeds 2048p."
-            exit
+	    echo -e "\n$( tput setaf 1 )LIMIT ERROR: $( tput sgr 0 )The cropped horizontal/vertical video resolution exceeds 2048p."
+	    exit
 	fi
     fi
 
@@ -447,12 +450,13 @@ EOF
 # MAIN LOOP #
 #############
 
+DetermineBoardLimit
+
 Main() {
     OutfileName
-    DetermineBoardLimit
     SetAudio
     DurationCheck
-    SetBitrate
+    SetBitrate $USERMARGIN
     ResolutionCheck
     SetSpeed
     MediaInfo
@@ -477,7 +481,12 @@ then
 elif [[ -f $IN ]]
 then
     INFILE=$IN
-    IN="."
+    if [[ $( echo $IN | grep "/" ) ]]
+    then
+	IN=$( echo $IN | sed 's/[^\/]*$//' )
+    else
+	IN="."
+    fi
     Main
 else
     echo "$( tput setaf 1 )Invalid file name or path.$( tput sgr 0 )"
