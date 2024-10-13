@@ -56,7 +56,7 @@ There are currently no flags to optimise for bandwidth or storage space, this ca
 
 Running the script with `-t` enabled sets the VP9 encoder to SVT-VP9. Optimisations for SvtVp9EncApp are automatically determined. Using SVT-VP9 instead of libvpx-vp9 will result in a significant encoding speed boost of **10x-100x** (depending on `-v` setting and system specs). Tradeoffs are a *reduction* in *compression efficiency* and *visual quality* at lower bitrates. Additionally, only a single pass can be made, which is less efficient than a two-pass approach.
 
-SVT-VP9 tends to produce files with bitrates below the target bitrate, which means that multiple passes with different margin settings may be advisable in order to achieve the highest possible quality (a tradeoff for the high encoding speed).
+SVT-VP9 tends to produce files with bitrates slightly below the target bitrate, which means that multiple passes with different margin settings may be advisable in order to achieve the highest possible quality (a tradeoff for the high encoding speed).
 
 [^1]: Currently, a positive margin value reduces the total bitrate, while a negative value increases it. This should probably be changed, but for now, it'll work.
-[^2]: Audio compatibility and scrubbing have been fixed, but it's still mostly a bodge, so expect weird issues.
+[^2]: SVT-VP9 has a known bug which causes the encoder to simply freeze. Stopping the script and re-running it fixes this. 
